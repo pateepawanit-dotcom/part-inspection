@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="th">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
@@ -15,49 +15,58 @@
   <div class="bar-in">
     <div class="brand">
       <span class="brand-name">Part Inspection</span>
-      <span class="brand-sub" id="countLabel">0 รายการ</span>
+      <span class="brand-sub" id="countLabel">0 records</span>
     </div>
-    <span class="net" id="netState">offline พร้อม</span>
+    <div class="bar-right">
+      <span class="net" id="netState">Offline ready</span>
+      <button type="button" class="icon-btn" id="settingsBtn" aria-label="Settings">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1"/></svg>
+      </button>
+    </div>
   </div>
 </header>
 
 <main class="wrap">
-  <!-- Entry form -->
   <section class="panel" id="formPanel">
     <div class="panel-head">
-      <h1 id="formTitle">ชิ้นใหม่</h1>
-      <button type="button" class="link" id="cancelEdit" hidden>ยกเลิกการแก้ไข</button>
-    </div>
-
-    <div class="scan-row">
-      <label class="btn btn-scan" for="scanInput">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7V4h3M18 4h3v3M21 17v3h-3M6 20H3v-3M7 8v8M10 8v8M13 8v8M16 8v8"/></svg>
-        สแกนป้าย (OCR / 2D)
-      </label>
-      <input type="file" id="scanInput" accept="image/*" capture="environment" hidden>
-    </div>
-    <div class="ocr" id="ocrBox" hidden>
-      <div class="ocr-status" id="ocrStatus"></div>
-      <div class="ocr-lines" id="ocrLines"></div>
+      <div>
+        <h1 id="formTitle">New record</h1>
+        <div class="ref" id="formRef">ID assigned on save</div>
+      </div>
+      <button type="button" class="link" id="cancelEdit" hidden>Cancel edit</button>
     </div>
 
     <div class="field">
       <label for="pn">P/N</label>
-      <input id="pn" class="code" autocomplete="off" autocapitalize="characters" spellcheck="false" inputmode="text" placeholder="เช่น 3214552-3">
+      <div class="input-scan">
+        <input id="pn" class="code" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="e.g. 3214552-3">
+        <button type="button" class="scan-btn" data-target="pn" aria-label="Scan P/N">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7V4h3M18 4h3v3M21 17v3h-3M6 20H3v-3M7 12h10"/></svg>
+          Scan
+        </button>
+      </div>
     </div>
     <div class="field">
       <label for="sn">S/N</label>
-      <input id="sn" class="code" autocomplete="off" autocapitalize="characters" spellcheck="false" inputmode="text" placeholder="เช่น A12345">
+      <div class="input-scan">
+        <input id="sn" class="code" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="e.g. A12345">
+        <button type="button" class="scan-btn" data-target="sn" aria-label="Scan S/N">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7V4h3M18 4h3v3M21 17v3h-3M6 20H3v-3M7 12h10"/></svg>
+          Scan
+        </button>
+      </div>
     </div>
+    <div class="scan-msg" id="scanMsg" hidden></div>
     <div class="dup" id="dupWarn" hidden></div>
+    <input type="file" id="scanInput" accept="image/*" capture="environment" hidden>
 
     <div class="row2">
       <div class="field">
-        <label for="date">วันที่</label>
+        <label for="date">Date</label>
         <input id="date" type="date">
       </div>
       <div class="field">
-        <label for="time">เวลา</label>
+        <label for="time">Time</label>
         <input id="time" type="time" step="60">
       </div>
     </div>
@@ -65,65 +74,112 @@
     <label class="check" for="pfr">
       <input type="checkbox" id="pfr">
       <span class="box" aria-hidden="true"></span>
-      <span class="check-text"><b>PFR</b> มีเอกสาร PFR มากับชิ้นนี้</span>
+      <span class="check-text"><b>PFR</b> received with this part</span>
     </label>
 
     <div class="field">
-      <label for="remark">หมายเหตุ <span class="opt">ไม่บังคับ</span></label>
+      <label for="remark">Remark <span class="opt">optional</span></label>
       <input id="remark" autocomplete="off">
     </div>
 
-    <div class="photos-head">
-      <span class="lbl">รูปถ่าย <span id="photoCount">0</span></span>
-      <span class="hint">ถ่ายทีละด้าน กดซ้ำได้เรื่อยๆ</span>
+    <div class="group">
+      <div class="photos-head">
+        <span class="lbl">Part photos <span id="partCount">0</span></span>
+        <span class="hint">One per side, as many as needed</span>
+      </div>
+      <div class="photos" id="partGrid"></div>
+      <div class="photo-actions">
+        <label class="btn btn-ghost" for="partCam">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>
+          Part photo
+        </label>
+        <input type="file" id="partCam" accept="image/*" capture="environment" hidden>
+        <label class="btn btn-ghost btn-narrow" for="partGal">Gallery</label>
+        <input type="file" id="partGal" accept="image/*" multiple hidden>
+      </div>
     </div>
-    <div class="photos" id="photoGrid"></div>
-    <div class="photo-actions">
-      <label class="btn btn-ghost" for="camInput">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>
-        ถ่ายรูป
-      </label>
-      <input type="file" id="camInput" accept="image/*" capture="environment" hidden>
-      <label class="btn btn-ghost" for="galInput">เลือกจากแกลเลอรี</label>
-      <input type="file" id="galInput" accept="image/*" multiple hidden>
+
+    <div class="group">
+      <div class="photos-head">
+        <span class="lbl">Documents <span id="docCount">0</span></span>
+        <span class="hint">PFR, tags, certificates</span>
+      </div>
+      <div class="photos" id="docGrid"></div>
+      <div class="photo-actions">
+        <label class="btn btn-ghost" for="docCam">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3h7l4 4v14H7z"/><path d="M14 3v4h4M10 12h5M10 16h5"/></svg>
+          Document photo
+        </label>
+        <input type="file" id="docCam" accept="image/*" capture="environment" hidden>
+        <label class="btn btn-ghost btn-narrow" for="docGal">Gallery</label>
+        <input type="file" id="docGal" accept="image/*" multiple hidden>
+      </div>
     </div>
 
     <div class="err" id="formErr" hidden></div>
-    <button type="button" class="btn btn-primary" id="saveBtn">บันทึก แล้วเริ่มชิ้นถัดไป</button>
+    <button type="button" class="btn btn-primary" id="saveBtn">Save &amp; next part</button>
   </section>
 
-  <!-- List -->
   <section class="list-sec">
     <div class="list-head">
-      <h2>รายการที่บันทึก</h2>
-      <div class="list-actions">
-        <button type="button" class="btn btn-sm" id="exportBtn">Export ZIP + Excel</button>
-      </div>
+      <h2>Saved records</h2>
+      <button type="button" class="btn btn-sm" id="exportBtn">Export ZIP + Excel</button>
     </div>
     <div class="export-msg" id="exportMsg" hidden></div>
     <ul class="list" id="list"></ul>
-    <p class="empty" id="emptyState">ยังไม่มีรายการ กรอก P/N, S/N แล้วถ่ายรูปด้านบน จากนั้นกดบันทึก</p>
+    <p class="empty" id="emptyState">No records yet. Enter P/N and S/N, take photos, then tap Save.</p>
     <div class="danger-zone" id="dangerZone" hidden>
-      <button type="button" class="link danger" id="clearAllBtn">ลบทุกรายการในเครื่อง</button>
+      <button type="button" class="link danger" id="clearAllBtn">Delete all records on this phone</button>
     </div>
   </section>
 </main>
 
-<!-- In-page confirm -->
+<!-- Region picker for OCR -->
+<div class="cropper" id="cropper" hidden>
+  <div class="crop-top">
+    <span id="cropTitle">Drag a box around the P/N</span>
+    <button type="button" class="btn btn-sm btn-dark" id="cropCancel">Cancel</button>
+  </div>
+  <div class="crop-stage" id="cropStage">
+    <canvas id="cropCanvas"></canvas>
+  </div>
+  <div class="crop-bottom">
+    <button type="button" class="btn btn-sm btn-dark" id="cropRetake">New photo</button>
+    <button type="button" class="btn btn-sm btn-dark" id="cropWhole">Read whole photo</button>
+    <button type="button" class="btn btn-sm btn-accent" id="cropRead" disabled>Read selection</button>
+  </div>
+</div>
+
+<!-- Confirm sheet -->
 <div class="sheet" id="sheet" hidden>
   <div class="sheet-card" role="dialog" aria-modal="true" aria-labelledby="sheetMsg">
     <p id="sheetMsg"></p>
     <div class="sheet-btns">
-      <button type="button" class="btn btn-sm btn-ghost" id="sheetNo">ยกเลิก</button>
-      <button type="button" class="btn btn-sm btn-danger" id="sheetYes">ยืนยัน</button>
+      <button type="button" class="btn btn-sm btn-ghost" id="sheetNo">Cancel</button>
+      <button type="button" class="btn btn-sm btn-danger" id="sheetYes">Confirm</button>
     </div>
   </div>
 </div>
 
-<!-- Photo viewer -->
+<!-- Settings -->
+<div class="sheet" id="settings" hidden>
+  <div class="sheet-card" role="dialog" aria-modal="true" aria-labelledby="setTitle">
+    <h2 id="setTitle">Settings</h2>
+    <div class="field">
+      <label for="devCode">Device code</label>
+      <input id="devCode" class="code" maxlength="4" autocomplete="off" autocapitalize="characters">
+    </div>
+    <p class="hint">Record IDs look like <code id="idSample">A-261015-001</code>. Give each phone its own code so IDs never clash when files are merged.</p>
+    <div class="sheet-btns">
+      <button type="button" class="btn btn-sm btn-ghost" id="setCancel">Cancel</button>
+      <button type="button" class="btn btn-sm btn-accent" id="setSave">Save</button>
+    </div>
+  </div>
+</div>
+
 <div class="viewer" id="viewer" hidden>
   <img id="viewerImg" alt="">
-  <button type="button" class="btn btn-sm" id="viewerClose">ปิด</button>
+  <button type="button" class="btn btn-sm btn-dark" id="viewerClose">Close</button>
 </div>
 
 <div class="toast" id="toast" hidden></div>

@@ -1,5 +1,5 @@
 /* Cache-first service worker: every file the app needs, including OCR engine + English model, is cached on first visit. */
-const CACHE = 'part-inspect-v1';
+const CACHE = 'part-inspect-v2';
 const FILES = [
   "./",
   "app.js",
