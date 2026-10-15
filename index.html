@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Part Inspection</title>
+<meta name="theme-color" content="#16324f">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="bar">
+  <div class="bar-in">
+    <div class="brand">
+      <span class="brand-name">Part Inspection</span>
+      <span class="brand-sub" id="countLabel">0 รายการ</span>
+    </div>
+    <span class="net" id="netState">offline พร้อม</span>
+  </div>
+</header>
+
+<main class="wrap">
+  <!-- Entry form -->
+  <section class="panel" id="formPanel">
+    <div class="panel-head">
+      <h1 id="formTitle">ชิ้นใหม่</h1>
+      <button type="button" class="link" id="cancelEdit" hidden>ยกเลิกการแก้ไข</button>
+    </div>
+
+    <div class="scan-row">
+      <label class="btn btn-scan" for="scanInput">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7V4h3M18 4h3v3M21 17v3h-3M6 20H3v-3M7 8v8M10 8v8M13 8v8M16 8v8"/></svg>
+        สแกนป้าย (OCR / 2D)
+      </label>
+      <input type="file" id="scanInput" accept="image/*" capture="environment" hidden>
+    </div>
+    <div class="ocr" id="ocrBox" hidden>
+      <div class="ocr-status" id="ocrStatus"></div>
+      <div class="ocr-lines" id="ocrLines"></div>
+    </div>
+
+    <div class="field">
+      <label for="pn">P/N</label>
+      <input id="pn" class="code" autocomplete="off" autocapitalize="characters" spellcheck="false" inputmode="text" placeholder="เช่น 3214552-3">
+    </div>
+    <div class="field">
+      <label for="sn">S/N</label>
+      <input id="sn" class="code" autocomplete="off" autocapitalize="characters" spellcheck="false" inputmode="text" placeholder="เช่น A12345">
+    </div>
+    <div class="dup" id="dupWarn" hidden></div>
+
+    <div class="row2">
+      <div class="field">
+        <label for="date">วันที่</label>
+        <input id="date" type="date">
+      </div>
+      <div class="field">
+        <label for="time">เวลา</label>
+        <input id="time" type="time" step="60">
+      </div>
+    </div>
+
+    <label class="check" for="pfr">
+      <input type="checkbox" id="pfr">
+      <span class="box" aria-hidden="true"></span>
+      <span class="check-text"><b>PFR</b> มีเอกสาร PFR มากับชิ้นนี้</span>
+    </label>
+
+    <div class="field">
+      <label for="remark">หมายเหตุ <span class="opt">ไม่บังคับ</span></label>
+      <input id="remark" autocomplete="off">
+    </div>
+
+    <div class="photos-head">
+      <span class="lbl">รูปถ่าย <span id="photoCount">0</span></span>
+      <span class="hint">ถ่ายทีละด้าน กดซ้ำได้เรื่อยๆ</span>
+    </div>
+    <div class="photos" id="photoGrid"></div>
+    <div class="photo-actions">
+      <label class="btn btn-ghost" for="camInput">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>
+        ถ่ายรูป
+      </label>
+      <input type="file" id="camInput" accept="image/*" capture="environment" hidden>
+      <label class="btn btn-ghost" for="galInput">เลือกจากแกลเลอรี</label>
+      <input type="file" id="galInput" accept="image/*" multiple hidden>
+    </div>
+
+    <div class="err" id="formErr" hidden></div>
+    <button type="button" class="btn btn-primary" id="saveBtn">บันทึก แล้วเริ่มชิ้นถัดไป</button>
+  </section>
+
+  <!-- List -->
+  <section class="list-sec">
+    <div class="list-head">
+      <h2>รายการที่บันทึก</h2>
+      <div class="list-actions">
+        <button type="button" class="btn btn-sm" id="exportBtn">Export ZIP + Excel</button>
+      </div>
+    </div>
+    <div class="export-msg" id="exportMsg" hidden></div>
+    <ul class="list" id="list"></ul>
+    <p class="empty" id="emptyState">ยังไม่มีรายการ กรอก P/N, S/N แล้วถ่ายรูปด้านบน จากนั้นกดบันทึก</p>
+    <div class="danger-zone" id="dangerZone" hidden>
+      <button type="button" class="link danger" id="clearAllBtn">ลบทุกรายการในเครื่อง</button>
+    </div>
+  </section>
+</main>
+
+<!-- In-page confirm -->
+<div class="sheet" id="sheet" hidden>
+  <div class="sheet-card" role="dialog" aria-modal="true" aria-labelledby="sheetMsg">
+    <p id="sheetMsg"></p>
+    <div class="sheet-btns">
+      <button type="button" class="btn btn-sm btn-ghost" id="sheetNo">ยกเลิก</button>
+      <button type="button" class="btn btn-sm btn-danger" id="sheetYes">ยืนยัน</button>
+    </div>
+  </div>
+</div>
+
+<!-- Photo viewer -->
+<div class="viewer" id="viewer" hidden>
+  <img id="viewerImg" alt="">
+  <button type="button" class="btn btn-sm" id="viewerClose">ปิด</button>
+</div>
+
+<div class="toast" id="toast" hidden></div>
+
+<script src="vendor/jszip.min.js"></script>
+<script src="vendor/xlsx.full.min.js"></script>
+<script src="vendor/tesseract.min.js"></script>
+<script src="parse.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
