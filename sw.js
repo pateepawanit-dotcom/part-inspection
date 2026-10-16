@@ -1,5 +1,5 @@
 /* Cache-first service worker: every file the app needs, including OCR engine + English model, is cached on first visit. */
-const CACHE = 'part-inspect-v2';
+const CACHE = 'part-inspect-v3';
 const FILES = [
   "./",
   "app.js",
@@ -7,6 +7,7 @@ const FILES = [
   "icon-512.png",
   "index.html",
   "manifest.webmanifest",
+  "native.js",
   "parse.js",
   "style.css",
   "vendor/core/tesseract-core-lstm.wasm.js",

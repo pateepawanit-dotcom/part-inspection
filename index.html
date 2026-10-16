@@ -56,6 +56,16 @@
         </button>
       </div>
     </div>
+    <div class="field">
+      <label for="eo">EO <span class="opt">optional</span></label>
+      <div class="input-scan">
+        <input id="eo" class="code" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="e.g. EO-25-0123">
+        <button type="button" class="scan-btn" data-target="eo" aria-label="Scan EO">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7V4h3M18 4h3v3M21 17v3h-3M6 20H3v-3M7 12h10"/></svg>
+          Scan
+        </button>
+      </div>
+    </div>
     <div class="scan-msg" id="scanMsg" hidden></div>
     <div class="dup" id="dupWarn" hidden></div>
     <input type="file" id="scanInput" accept="image/*" capture="environment" hidden>
@@ -89,10 +99,10 @@
       </div>
       <div class="photos" id="partGrid"></div>
       <div class="photo-actions">
-        <label class="btn btn-ghost" for="partCam">
+        <button type="button" class="btn btn-ghost" id="partCamBtn">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>
           Part photo
-        </label>
+        </button>
         <input type="file" id="partCam" accept="image/*" capture="environment" hidden>
         <label class="btn btn-ghost btn-narrow" for="partGal">Gallery</label>
         <input type="file" id="partGal" accept="image/*" multiple hidden>
@@ -106,10 +116,10 @@
       </div>
       <div class="photos" id="docGrid"></div>
       <div class="photo-actions">
-        <label class="btn btn-ghost" for="docCam">
+        <button type="button" class="btn btn-ghost" id="docCamBtn">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3h7l4 4v14H7z"/><path d="M14 3v4h4M10 12h5M10 16h5"/></svg>
           Document photo
-        </label>
+        </button>
         <input type="file" id="docCam" accept="image/*" capture="environment" hidden>
         <label class="btn btn-ghost btn-narrow" for="docGal">Gallery</label>
         <input type="file" id="docGal" accept="image/*" multiple hidden>
@@ -182,11 +192,27 @@
   <button type="button" class="btn btn-sm btn-dark" id="viewerClose">Close</button>
 </div>
 
+<div class="cam" id="cam" hidden>
+  <video id="camVideo" playsinline muted autoplay></video>
+  <div class="cam-top">
+    <span class="cam-title" id="camTitle">Part photos</span>
+    <button type="button" class="cam-torch" id="camTorch" aria-pressed="false" hidden>Light off</button>
+  </div>
+  <div class="cam-msg" id="camMsg" hidden></div>
+  <div class="cam-flash" id="camFlash"></div>
+  <div class="cam-bar">
+    <div class="cam-last"><img id="camLast" alt="" hidden><span id="camCount">0</span></div>
+    <button type="button" class="cam-shutter" id="camShutter" aria-label="Take photo"></button>
+    <button type="button" class="btn btn-sm btn-dark" id="camDone">Done</button>
+  </div>
+</div>
+
 <div class="toast" id="toast" hidden></div>
 
 <script src="vendor/jszip.min.js"></script>
 <script src="vendor/xlsx.full.min.js"></script>
 <script src="vendor/tesseract.min.js"></script>
+<script src="native.js"></script>
 <script src="parse.js"></script>
 <script src="app.js"></script>
 </body>

@@ -28,6 +28,7 @@
   // Label patterns as printed on nameplates, tolerant of common OCR confusions (/ read as I, 1, l)
   var PN_LABEL = '(?:P\\s?[\\/I1L|]\\s?N|PNR|PN|PART\\s*(?:NO|NUMBER|NBR|#|N[O0]\\.?)|MFR\\s*P\\/?N)';
   var SN_LABEL = '(?:S\\s?[\\/I1L|]\\s?N|SER(?:IAL)?\\s*(?:NO|NUMBER|NBR|#|N[O0]\\.?)?|SN)';
+  var EO_LABEL = '(?:ENG(?:INEERING)?\\.?\\s*ORDER(?:\\s*(?:NO|NUMBER|NBR|#|N[O0]\\.?))?|E\\.?\\s?O\\.?(?:\\s*(?:NO|NUMBER|NBR|#|N[O0]\\.?))?)';
 
   function findAfter(lines, label) {
     var reSame = new RegExp('(?:^|[^A-Z])' + label + '\\.?\\s*[:.#\\-]?\\s*' + VALUE);
@@ -46,7 +47,7 @@
 
   function parseLabels(text) {
     var lines = (text || '').toUpperCase().split(/\r?\n/).map(function (s) { return s.trim(); }).filter(Boolean);
-    return { pn: findAfter(lines, PN_LABEL), sn: findAfter(lines, SN_LABEL) };
+    return { pn: findAfter(lines, PN_LABEL), sn: findAfter(lines, SN_LABEL), eo: findAfter(lines, EO_LABEL) };
   }
 
   // Lines worth offering as tap-to-fill candidates
@@ -61,7 +62,7 @@
   // Value part of a line: drop a leading label such as "P/N:" or "SER NO."
   function stripLabel(line) {
     var u = (line || '').toUpperCase().trim();
-    var re = new RegExp('^(?:' + PN_LABEL + '|' + SN_LABEL + '|MFR|MOD|DESC|CAGE)\\.?\\s*[:.#\\-]?\\s*');
+    var re = new RegExp('^(?:' + EO_LABEL + '|' + PN_LABEL + '|' + SN_LABEL + '|MFR|MOD|DESC|CAGE)\\.?\\s*[:.#\\-]?\\s*');
     var rest = u.replace(re, '');
     var m = rest.match(new RegExp('^' + VALUE));
     return m ? clean(m[1]) : clean(rest.split(/\s+/)[0]);

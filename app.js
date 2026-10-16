@@ -132,7 +132,7 @@
     if (cur) cur.parts.concat(cur.docs).forEach(function (p) { URL.revokeObjectURL(p.url); });
     cur = { id: null, ref: null, parts: [], docs: [] };
     var n = nowParts();
-    $('pn').value = ''; $('sn').value = ''; $('remark').value = '';
+    $('pn').value = ''; $('sn').value = ''; $('eo').value = ''; $('remark').value = '';
     $('date').value = n.date; $('time').value = n.time; $('pfr').checked = false;
     $('formTitle').textContent = 'New record';
     $('formRef').textContent = 'ID assigned on save'; $('formRef').classList.remove('has');
@@ -144,7 +144,7 @@
   function editRecord(r) {
     newForm();
     cur.id = r.id; cur.ref = r.ref; cur.createdAt = r.createdAt;
-    $('pn').value = r.pn; $('sn').value = r.sn; $('remark').value = r.remark || '';
+    $('pn').value = r.pn; $('sn').value = r.sn; $('eo').value = r.eo || ''; $('remark').value = r.remark || '';
     $('date').value = r.date; $('time').value = r.time; $('pfr').checked = !!r.pfr;
     r.parts.forEach(function (b) { addPhoto('parts', b); });
     r.docs.forEach(function (b) { addPhoto('docs', b); });
@@ -180,7 +180,7 @@
       return refP.then(function (ref) {
         var rec = {
           id: cur.id || uid(), ref: ref, createdAt: cur.createdAt || Date.now(), updatedAt: Date.now(),
-          pn: pn, sn: sn, date: $('date').value, time: $('time').value,
+          pn: pn, sn: sn, eo: P.clean($('eo').value), date: $('date').value, time: $('time').value,
           pfr: $('pfr').checked, remark: $('remark').value.trim(),
           parts: cur.parts.map(function (p) { return p.blob; }),
           docs: cur.docs.map(function (p) { return p.blob; }),
@@ -232,7 +232,9 @@
       var pill = document.createElement('span'); pill.className = 'pill ' + (r.pfr ? 'yes' : 'no'); pill.textContent = r.pfr ? 'PFR ✓' : 'No PFR';
       sub.appendChild(pill);
       if (r.exported) { var ex = document.createElement('span'); ex.textContent = 'Exported'; sub.appendChild(ex); }
-      m.append(rid, pnl, snl, sub);
+      m.append(rid, pnl, snl);
+      if (r.eo) { var eol = document.createElement('div'); eol.className = 'pnsn'; eol.innerHTML = '<span>EO</span>'; eol.append(r.eo); m.append(eol); }
+      m.append(sub);
       var a = document.createElement('div'); a.className = 'acts';
       var eb = document.createElement('button'); eb.type = 'button'; eb.textContent = 'Edit'; eb.onclick = function () { editRecord(r); };
       var db = document.createElement('button'); db.type = 'button'; db.className = 'del'; db.textContent = 'Delete';
@@ -261,10 +263,23 @@
       workerPath: abs('vendor/worker.min.js'),
       corePath: abs('vendor/core/'),
       langPath: abs('vendor/lang'),
+      // Android app ships plain eng.traineddata (its asset packer mishandles .gz); the web app uses the .gz
+      gzip: !(window.NativeApp && window.NativeApp.isNative),
       workerBlobURL: false,
       logger: function (m) { if (window.__ocrProgress) window.__ocrProgress(m); }
     }).catch(function (e) { ocrWorker = null; throw e; });
     return ocrWorker;
+  }
+  function resetWorker() {
+    var w = ocrWorker; ocrWorker = null;
+    if (w) w.then(function (x) { x.terminate(); }).catch(function () {});
+  }
+  // Never leave the user looking at "Reading…" forever
+  function withTimeout(p, ms, msg) {
+    return new Promise(function (res, rej) {
+      var t = setTimeout(function () { rej(new Error(typeof msg === 'function' ? msg() : msg)); }, ms);
+      p.then(function (v) { clearTimeout(t); res(v); }, function (e) { clearTimeout(t); rej(e); });
+    });
   }
 
   function detectBarcode(bmp) {
@@ -297,7 +312,7 @@
     return c;
   }
 
-  function label(t) { return t === 'pn' ? 'P/N' : 'S/N'; }
+  function label(t) { return { pn: 'P/N', sn: 'S/N', eo: 'EO' }[t] || t; }
   function setField(t, v) { $(t).value = v; flash(t); checkDup(); }
 
   function scanMsg(html, cands, target) {
@@ -321,8 +336,92 @@
   function startScan(target) {
     scanTarget = target;
     if (lastScan) openCropper();
-    else $('scanInput').click();
+    else openCam('parts', { single: true, title: 'Photo of the ' + label(target), fallback: 'scanInput', onShot: onScanPhoto });
   }
+
+  // ---------- in-app camera: tap shutter = photo saved, no OK screen ----------
+  var cam = { stream: null, track: null, ic: null, kind: 'parts', opts: {}, busy: false, pushed: false, broken: false, n: 0 };
+  function openCam(kind, opts) {
+    opts = opts || {};
+    var fb = opts.fallback || (kind === 'docs' ? 'docCam' : 'partCam');
+    if (cam.broken || !(navigator.mediaDevices && navigator.mediaDevices.getUserMedia)) { $(fb).click(); return; }
+    cam.kind = kind; cam.opts = opts; cam.n = 0; cam.busy = false;
+    $('camTitle').textContent = opts.title || (kind === 'docs' ? 'Document photos' : 'Part photos');
+    $('camCount').textContent = '0'; $('camLast').hidden = true; $('camMsg').hidden = true;
+    $('camTorch').hidden = true; $('camTorch').setAttribute('aria-pressed', 'false'); $('camTorch').textContent = 'Light off';
+    $('camShutter').disabled = true;
+    $('cam').hidden = false;
+    try { history.pushState({ cam: 1 }, ''); cam.pushed = true; } catch (e) {}
+    navigator.mediaDevices.getUserMedia({
+      audio: false,
+      video: { facingMode: { ideal: 'environment' }, width: { ideal: 4096 }, height: { ideal: 3072 } }
+    }).then(function (stream) {
+      if ($('cam').hidden) { stream.getTracks().forEach(function (t) { t.stop(); }); return; }
+      cam.stream = stream; cam.track = stream.getVideoTracks()[0];
+      var v = $('camVideo'); v.srcObject = stream; v.play().catch(function () {});
+      try { cam.ic = ('ImageCapture' in window) ? new ImageCapture(cam.track) : null; } catch (e) { cam.ic = null; }
+      var caps = cam.track.getCapabilities ? cam.track.getCapabilities() : {};
+      $('camTorch').hidden = !caps.torch;
+      $('camShutter').disabled = false;
+    }).catch(function (e) {
+      cam.broken = true;
+      closeCam();
+      toast('Camera could not start (' + (e && e.name || e) + '). Tap the button again to use the phone camera app.');
+    });
+  }
+  function closeCam(fromBack) {
+    if (cam.stream) cam.stream.getTracks().forEach(function (t) { t.stop(); });
+    cam.stream = cam.track = cam.ic = null;
+    $('camVideo').srcObject = null;
+    $('cam').hidden = true;
+    if (cam.pushed && !fromBack) { cam.pushed = false; try { history.back(); } catch (e) {} }
+    cam.pushed = false;
+  }
+  function frameGrab() {
+    var v = $('camVideo'), c = document.createElement('canvas');
+    c.width = v.videoWidth; c.height = v.videoHeight;
+    if (!c.width) return Promise.reject(new Error('camera not ready'));
+    c.getContext('2d').drawImage(v, 0, 0);
+    return new Promise(function (res) { c.toBlob(res, 'image/jpeg', 0.92); });
+  }
+  function grab() {
+    if (!cam.ic || !cam.ic.takePhoto) return frameGrab();
+    // full-resolution still when the browser supports it; fall back to the live frame if it is slow or fails
+    return withTimeout(cam.ic.takePhoto(), 3500, 'slow').catch(frameGrab);
+  }
+  function shoot() {
+    if (cam.busy || !cam.stream) return;
+    cam.busy = true;
+    var fl = $('camFlash'); fl.classList.add('on'); setTimeout(function () { fl.classList.remove('on'); }, 60);
+    if (navigator.vibrate) try { navigator.vibrate(30); } catch (e) {}
+    var kind = cam.kind, opts = cam.opts;
+    grab().then(function (raw) {
+      if (!raw) throw new Error('no image');
+      if (opts.single) { closeCam(); opts.onShot(raw); return; }
+      var max = kind === 'docs' ? 3000 : 2400, q = kind === 'docs' ? 0.9 : 0.88;
+      return compress(raw, max, q).then(function (b) {
+        addPhoto(kind, b); cam.n++;
+        var arr = cur[kind], last = arr[arr.length - 1];
+        $('camLast').src = last.url; $('camLast').hidden = false;
+        $('camCount').textContent = String(cam.n);
+      });
+    }).catch(function (e) {
+      toast('Photo not saved: ' + (e && e.message || e));
+    }).then(function () { cam.busy = false; });
+  }
+  $('camShutter').onclick = shoot;
+  $('camDone').onclick = function () { var n = cam.n, k = cam.kind; closeCam(); if (n) toast(n + (k === 'docs' ? ' document' : ' part') + ' photo' + (n > 1 ? 's' : '') + ' saved'); };
+  $('camTorch').onclick = function () {
+    if (!cam.track) return;
+    var on = $('camTorch').getAttribute('aria-pressed') !== 'true';
+    cam.track.applyConstraints({ advanced: [{ torch: on }] }).then(function () {
+      $('camTorch').setAttribute('aria-pressed', String(on)); $('camTorch').textContent = on ? 'Light on' : 'Light off';
+    }).catch(function () {});
+  };
+  window.addEventListener('popstate', function () { if (!$('cam').hidden) closeCam(true); });
+  document.addEventListener('visibilitychange', function () { if (document.hidden && !$('cam').hidden) closeCam(); });
+  $('partCamBtn').onclick = function () { openCam('parts'); };
+  $('docCamBtn').onclick = function () { openCam('docs'); };
 
   function onScanPhoto(file) {
     compress(file).then(function (b) { addPhoto('parts', b); });
@@ -404,10 +503,16 @@
     closeCropper();
     scanMsg('Reading ' + label(target) + '… (first run loads the OCR engine)');
     var canvas = prepRegion(lastScan, region);
-    getWorker(function (m) {
-      if (m.status === 'recognizing text') scanMsg('Reading ' + label(target) + '… ' + Math.round(m.progress * 100) + '%');
-    }).then(function (w) {
-      return w.setParameters({ tessedit_pageseg_mode: psm }).then(function () { return w.recognize(canvas); });
+    var stage = 'starting OCR engine';
+    var ready = withTimeout(getWorker(function (m) {
+      if (!m || !m.status) return;
+      stage = m.status;
+      var pct = typeof m.progress === 'number' ? ' ' + Math.round(m.progress * 100) + '%' : '';
+      scanMsg((m.status === 'recognizing text' ? 'Reading ' + label(target) + '…' : 'Preparing OCR: ' + esc(m.status)) + pct);
+    }), 60000, function () { return 'the OCR engine did not start (stuck at: ' + stage + ')'; });
+    ready.then(function (w) {
+      return withTimeout(w.setParameters({ tessedit_pageseg_mode: psm }).then(function () { return w.recognize(canvas); }),
+        45000, 'reading took too long');
     }).then(function (r) {
       var text = (r && r.data && r.data.text) || '';
       var lines = P.candidateLines(text);
@@ -420,7 +525,11 @@
       } else {
         scanMsg('No text found. Tap Scan again and draw a box closer around the ' + label(target) + ', or type it in.');
       }
-    }).catch(function (e) { scanMsg('OCR failed: ' + esc(e && e.message || e) + '. Type the ' + label(target) + ' in.'); });
+    }).catch(function (e) {
+      resetWorker();
+      console.error('OCR error', e);
+      scanMsg('OCR failed: ' + esc(e && e.message || e) + '. Tap Scan to try again, or type the ' + label(target) + ' in.');
+    });
   }
 
   $('cropRead').onclick = function () { if (crop.sel) runOcr(crop.sel, '6'); };
@@ -437,7 +546,7 @@
     var zip = new JSZip(), st = stamp(), base = 'Inspection_' + st;
     var root = zip.folder(base);
     var ordered = records.slice().sort(function (a, b) { return a.createdAt - b.createdAt; });
-    var rows = [['Record ID', 'Date', 'Time', 'P/N', 'S/N', 'PFR', 'Part photos', 'Doc photos', 'Folder', 'Remark']];
+    var rows = [['Record ID', 'Date', 'Time', 'P/N', 'S/N', 'EO', 'PFR', 'Part photos', 'Doc photos', 'Folder', 'Remark']];
     ordered.forEach(function (r) {
       var stem = r.ref + '_' + P.safeName(r.pn) + '_' + P.safeName(r.sn);
       var f = root.folder(stem);
@@ -446,26 +555,33 @@
         var dfo = f.folder('documents');
         r.docs.forEach(function (b, j) { dfo.file(stem + '_DOC' + pad(j + 1) + '.jpg', b); });
       }
-      rows.push([r.ref, r.date, r.time, r.pn, r.sn, r.pfr ? 'Yes' : 'No', r.parts.length, r.docs.length, stem, r.remark || '']);
+      rows.push([r.ref, r.date, r.time, r.pn, r.sn, r.eo || '', r.pfr ? 'Yes' : 'No', r.parts.length, r.docs.length, stem, r.remark || '']);
     });
     var ws = XLSX.utils.aoa_to_sheet(rows);
-    ws['!cols'] = [{ wch: 15 }, { wch: 11 }, { wch: 7 }, { wch: 22 }, { wch: 18 }, { wch: 6 }, { wch: 11 }, { wch: 10 }, { wch: 44 }, { wch: 30 }];
+    ws['!cols'] = [{ wch: 15 }, { wch: 11 }, { wch: 7 }, { wch: 22 }, { wch: 18 }, { wch: 20 }, { wch: 6 }, { wch: 11 }, { wch: 10 }, { wch: 44 }, { wch: 30 }];
     for (var R = 2; R <= rows.length; R++) { // keep IDs, P/N and S/N as text so Excel never strips leading zeros
-      ['A', 'D', 'E'].forEach(function (col) { var c = ws[col + R]; if (c) { c.t = 's'; c.z = '@'; } });
+      ['A', 'D', 'E', 'F'].forEach(function (col) { var c = ws[col + R]; if (c) { c.t = 's'; c.z = '@'; } });
     }
-    ws['!autofilter'] = { ref: 'A1:J' + rows.length };
+    ws['!autofilter'] = { ref: 'A1:K' + rows.length };
     var wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, 'Inspection');
     root.file(base + '.xlsx', XLSX.write(wb, { bookType: 'xlsx', type: 'array' }));
 
     zip.generateAsync({ type: 'blob', compression: 'STORE' }).then(function (blob) {
       var name = base + '.zip';
-      var a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name;
-      document.body.appendChild(a); a.click(); a.remove();
-      setTimeout(function () { URL.revokeObjectURL(a.href); }, 60000);
-      return Promise.all(records.map(function (r) { r.exported = true; return DB.put(r); })).then(function () {
+      var native = window.NativeApp && window.NativeApp.isNative;
+      var saved;
+      if (native) {
+        saved = window.NativeApp.saveAndShare(blob, name);
+      } else {
+        var a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name;
+        document.body.appendChild(a); a.click(); a.remove();
+        setTimeout(function () { URL.revokeObjectURL(a.href); }, 60000);
+        saved = Promise.resolve();
+      }
+      return saved.then(function () { return Promise.all(records.map(function (r) { r.exported = true; return DB.put(r); })).then(function () {
         var msg = $('exportMsg'); msg.hidden = false; msg.innerHTML = '';
         var t = document.createElement('div');
-        t.textContent = 'Saved ' + name + ' to Downloads (' + (blob.size / 1048576).toFixed(1) + ' MB, ' + plural(ordered.length, 'record') + ').';
+        t.textContent = (native ? 'Shared ' : 'Saved ') + name + (native ? ' (' : ' to Downloads (') + (blob.size / 1048576).toFixed(1) + ' MB, ' + plural(ordered.length, 'record') + ').';
         var clr = document.createElement('button'); clr.type = 'button'; clr.className = 'link danger'; clr.textContent = 'Delete exported records from this phone';
         clr.onclick = function () {
           var ex = records.filter(function (r) { return r.exported; });
@@ -477,7 +593,7 @@
         };
         msg.append(t, clr);
         return loadList();
-      });
+      }); });
     }).catch(function (e) {
       toast('Export failed: ' + (e && e.message || e));
     }).then(function () { btn.disabled = records.length === 0; btn.textContent = 'Export ZIP + Excel'; });
@@ -505,12 +621,13 @@
   Array.prototype.forEach.call(document.querySelectorAll('.scan-btn'), function (b) {
     b.addEventListener('click', function () { startScan(b.getAttribute('data-target')); });
   });
-  ['pn', 'sn'].forEach(function (id) {
+  ['pn', 'sn', 'eo'].forEach(function (id) {
     $(id).addEventListener('input', function () { showErr(''); checkDup(); });
     $(id).addEventListener('blur', function () { $(id).value = P.clean($(id).value); checkDup(); });
   });
   $('pn').addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); $('sn').focus(); } });
-  $('sn').addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); $('sn').blur(); } });
+  $('sn').addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); $('eo').focus(); } });
+  $('eo').addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); $('eo').blur(); } });
   $('saveBtn').onclick = save;
   $('cancelEdit').onclick = newForm;
   $('exportBtn').onclick = exportAll;
@@ -526,12 +643,19 @@
     var ready = navigator.serviceWorker && navigator.serviceWorker.controller;
     $('netState').textContent = ready ? 'Offline ready' : (navigator.onLine ? 'Preparing offline' : 'Offline');
   }
-  if ('serviceWorker' in navigator) {
+  if (window.NativeApp && window.NativeApp.isNative) {
+    netLabel = function () { $('netState').textContent = 'Offline ready'; }; // app files are inside the APK
+  } else if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('sw.js').then(function () { return navigator.serviceWorker.ready; }).then(netLabel).catch(netLabel);
     navigator.serviceWorker.addEventListener('controllerchange', netLabel);
   }
   window.addEventListener('online', netLabel); window.addEventListener('offline', netLabel);
   netLabel();
+
+  // Warm up the OCR engine in the background so the first Scan doesn't wait for it to load
+  setTimeout(function () {
+    try { getWorker(null).catch(function () { resetWorker(); }); } catch (e) {}
+  }, 1500);
 
   newForm();
   DB.getMeta('device', 'A').then(function (v) { devCode = v; }).then(loadList)
